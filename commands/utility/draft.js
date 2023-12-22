@@ -75,11 +75,7 @@ module.exports = {
 
             if (existingChannelDraftData.length != 0)
             {
-                message = `Deleting existing draft for this channel: Question: **'${existingChannelDraft[0].question}'**.\n\n`;
-            }
-            else
-            {
-                existingChannelDraftData = [];
+                message = `Deleting existing draft for this channel: Question: **'${existingChannelDraftData[0].question}'**.\n\n`;
             }
 
             existingChannelDraftData.unshift(newDraft);
@@ -102,6 +98,7 @@ module.exports = {
                 return;
             }
 
+            let existingChannelDraft = existingChannelDraftData[0];
             const expectedUserToDraft = existingChannelDraft.userQueue[0];
             if (expectedUserToDraft.userId != interaction.member.id)
             {
@@ -120,10 +117,10 @@ module.exports = {
                 choice: choice
             });
             existingChannelDraft.userQueue.shift();
-            drafts[channelId] = existingChannelDraft;
 
             if (existingChannelDraft.userQueue.length === 0)
             {
+                existingChannelDraft.isFinished = true;
                 let message = `Draft finished! Result...`;
                 for (let c of existingChannelDraft.answers)
                 {
@@ -175,7 +172,15 @@ function saveDraftDataToFile(data, channelId)
 
 function getDraftDataFromFile(channelId)
 {
-    return JSON.parse(fs.readFileSync(getChannelDraftFile(channelId)));
+    const draftFile = getChannelDraftFile(channelId);
+    if (fs.existsSync(draftFile))
+    {
+        return JSON.parse(fs.readFileSync(draftFile));
+    }
+    else
+    {
+        return [];
+    }
 }
 
 function getChannelDraftFile(channelId)
