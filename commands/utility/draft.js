@@ -2,6 +2,7 @@ const { SlashCommandBuilder } = require('discord.js');
 const fs = require('node:fs');
 const user = require('./user.js');
 const draftsFilePath = './data/drafts.json';
+const channelDraftFilePathFormat = './data/##CHANNELID##.json';
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('draft')
@@ -30,9 +31,8 @@ module.exports = {
                         .setDescription('The choice being made with this selection'))),
     async execute(interaction)
     {
-        let drafts = JSON.parse(fs.readFileSync(draftsFilePath));
         const channelId = interaction.channelId;
-        const existingChannelDraft = drafts[channelId];
+        let existingChannelDraftData = getDraftDataFromFile(channelId);
         if (interaction.options.getSubcommand() === 'new')
         {
             const roundCount = interaction.options.getInteger('rounds');
@@ -52,6 +52,7 @@ module.exports = {
             }
             let fullUserQueue = [];
             shuffle(userList);
+            const originalDraftOrder = userList.join(", ");
             for (let i = 0; i < roundCount; i++)
             {
                 if (i != 0)
@@ -62,11 +63,8 @@ module.exports = {
             }
             const question = interaction.options.getString('question');
             let message = ``;
-            if (existingChannelDraft)
-            {
-                message = `Deleting existing draft for this channel: Question: **'${existingChannelDraft.question}'**.\n\n`;
-            }
-            drafts[channelId] = {
+
+            let newDraft = {
                 rounds: roundCount,
                 userString: userString,
                 question: question,
@@ -74,20 +72,36 @@ module.exports = {
                 answers: [],
                 isFinished: false
             };
-            message += `Starting draft with ${roundCount} rounds and users: ${userString}. Question: ${question}.`;
-            console.log(`Round count: ${roundCount}, User List: ${userString}`);
-            console.log(message);
-            console.log(`Total drafts: ${drafts.length}`);
-            fs.writeFileSync(draftsFilePath, JSON.stringify(drafts));
+
+            if (existingChannelDraftData.length != 0)
+            {
+                message = `Deleting existing draft for this channel: Question: **'${existingChannelDraft[0].question}'**.\n\n`;
+            }
+            else
+            {
+                existingChannelDraftData = [];
+            }
+
+            existingChannelDraftData.unshift(newDraft);
+            const firstUser = fullUserQueue[0];
+            message += `Starting draft with ${roundCount} rounds. Question: ${question}. Draft order: ${originalDraftOrder}. First up: ${firstUser}`;
+            saveDraftDataToFile(existingChannelDraftData, channelId);
+            await interaction.reply(message);
             await interaction.reply(message);
         }
         else if (interaction.options.getSubcommand() === 'choose')
         {
-            if (!existingChannelDraft)
+            if (!existingChannelDraftData.length === 0)
             {
-                await interaction.reply(`No active draft in this channel.`);
+                await interaction.reply(`No drafts have been staretd in this channel. Please try the /draft /new command!`);
                 return;
             }
+            if (existingChannelDraftData[0].isFinished)
+            {
+                await interaction.reply(`Previous draft is already finished. Please start a new draft with the /draft /new command!`);
+                return;
+            }
+
             const expectedUserToDraft = existingChannelDraft.userQueue[0];
             if (expectedUserToDraft.userId != interaction.member.id)
             {
@@ -105,10 +119,25 @@ module.exports = {
                 user: expectedUserToDraft,
                 choice: choice
             });
-            existingChannelDraft.userQueue = existingChannelDraft.userQueue.shift();
+            existingChannelDraft.userQueue.shift();
             drafts[channelId] = existingChannelDraft;
-            fs.writeFileSync(draftsFilePath, JSON.stringify(drafts));
-            await interaction.reply(message);
+
+            if (existingChannelDraft.userQueue.length === 0)
+            {
+                let message = `Draft finished! Result...`;
+                for (let c of existingChannelDraft.answers)
+                {
+                    message += `\n* <@${c.user.userId}>: ${c.choice}`;
+                }
+                await interaction.reply(message);
+            }
+            else
+            {
+                const message = `Choice selected: ${choice}. Next up: <@${existingChannelDraft.userQueue[0].userId}>`;
+                await interaction.reply(message);
+            }
+
+            saveDraftDataToFile(existingChannelDraftData, channelId);
         }
     },
 };
@@ -131,4 +160,25 @@ function shuffle(array)
     }
 
     return array;
+}
+
+function checkIfDraftActive()
+{
+
+}
+
+function saveDraftDataToFile(data, channelId)
+{
+    fs.writeFileSync(getChannelDraftFile(channelId), JSON.stringify(data));
+    return;
+}
+
+function getDraftDataFromFile(channelId)
+{
+    return JSON.parse(fs.readFileSync(getChannelDraftFile(channelId)));
+}
+
+function getChannelDraftFile(channelId)
+{
+    return channelDraftFilePathFormat.replace("##CHANNELID##", channelId);
 }
