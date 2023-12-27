@@ -83,7 +83,6 @@ module.exports = {
             message += `Starting draft with ${roundCount} rounds. Question: ${question}. Draft order: ${originalDraftOrder}. First up: ${firstUser}`;
             saveDraftDataToFile(existingChannelDraftData, channelId);
             await interaction.reply(message);
-            await interaction.reply(message);
         }
         else if (interaction.options.getSubcommand() === 'choose')
         {
